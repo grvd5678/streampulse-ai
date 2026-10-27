@@ -60,37 +60,44 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
       if (status.velocity) setVelocity(status.velocity);
     });
 
-    // Listen to AI summaries (with ID deduplication)
+    // Listen to AI summaries (with full payload deduplication)
     s.on('ai_summary_update', (data) => {
       console.log('AI Summary Received:', data);
       setIsAnalyzing(false);
+
+      if (!data || !data.id) return;
+
+      // Ensure the ENTIRE payload is only processed once
       setSummaries(prev => {
-        if (!data || !data.id || prev.some(item => item.id === data.id)) {
-          return prev;
+        if (prev.some(item => item.id === data.id)) {
+          return prev; // Already processed this analysis ID
         }
+
+        // Only append questions if this analysis batch is fresh
+        if (data.questions && data.questions.length > 0) {
+          setQuestions(prevQ => {
+            const newQuestions = data.questions.map(q => ({
+              ...q,
+              id: `${data.id}-${q.question.slice(0, 10)}-${Math.random()}`,
+              timestamp: new Date(),
+              isAnswered: false,
+              isPinned: false
+            }));
+            return [...newQuestions, ...prevQ].slice(0, 30);
+          });
+        }
+
+        // Only append alerts if this analysis batch is fresh
+        if (data.alerts && data.alerts.length > 0) {
+          setAlerts(prevA => [...data.alerts, ...prevA].slice(0, 10));
+        }
+
+        if (data.sentiment) {
+          setSentiment(data.sentiment);
+        }
+
         return [data, ...prev.slice(0, 19)];
       });
-
-      if (data.questions && data.questions.length > 0) {
-        setQuestions(prev => {
-          const newQuestions = data.questions.map(q => ({
-            ...q,
-            id: `${Date.now()}-${Math.random()}`,
-            timestamp: new Date(),
-            isAnswered: false,
-            isPinned: false
-          }));
-          return [...newQuestions, ...prev].slice(0, 30);
-        });
-      }
-
-      if (data.sentiment) {
-        setSentiment(data.sentiment);
-      }
-
-      if (data.alerts && data.alerts.length > 0) {
-        setAlerts(prev => [...data.alerts, ...prev].slice(0, 10));
-      }
     });
 
     // Listen to live raw chat
@@ -146,11 +153,17 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
 
   const triggerAnalyzeNow = async () => {
     setIsAnalyzing(true);
+
+    // Safety timeout: guaranteed reset if socket event is missed
+    const safetyTimer = setTimeout(() => {
+      setIsAnalyzing(false);
+    }, 4500);
+
     try {
       await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
-      // The new summary will be delivered cleanly via the 'ai_summary_update' socket event
     } catch (e) {
       console.error('Failed to trigger manual analysis:', e);
+      clearTimeout(safetyTimer);
       setIsAnalyzing(false);
     }
   };
