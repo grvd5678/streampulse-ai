@@ -1,0 +1,167 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
+import OpenAI from 'openai';
+
+let openaiClient = null;
+let geminiClient = null;
+
+const getOpenAIClient = () => {
+  if (!openaiClient && process.env.OPENAI_API_KEY) {
+    openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+  }
+  return openaiClient;
+};
+
+const getGeminiClient = () => {
+  if (!geminiClient && process.env.GEMINI_API_KEY) {
+    geminiClient = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+  }
+  return geminiClient;
+};
+
+/**
+ * Analyzes a batch of chat messages and returns structured intelligence:
+ * - 3 summary bullet points
+ * - extracted viewer questions
+ * - sentiment & vibe score (-1.0 to +1.0)
+ * - technical or gameplay alerts
+ */
+export async function analyzeChatBatch(messages, channelName = 'general') {
+  if (!messages || messages.length === 0) {
+    return {
+      bullets: ['Chat is quiet. Waiting for incoming activity...'],
+      questions: [],
+      sentiment: { score: 0.0, label: 'Neutral' },
+      alerts: []
+    };
+  }
+
+  const chatText = messages
+    .map(m => `[${m.user}]: ${m.message}`)
+    .join('\n');
+
+  const systemPrompt = `You are StreamPulse AI, a real-time stream intelligence co-pilot for Twitch streamer "${channelName}".
+Your job is to parse incoming live chat logs and extract high-value insights for the streamer.
+
+Analyze the provided chat batch and return ONLY a valid JSON object matching this schema:
+{
+  "bullets": [
+    "Short 1-sentence bullet on what chat is discussing or reacting to",
+    "Short 1-sentence bullet on community sentiment / memes",
+    "Short 1-sentence bullet on any tips, suggestions, or game reactions"
+  ],
+  "questions": [
+    {
+      "user": "username",
+      "question": "Clear, concise extracted question directed at the streamer",
+      "category": "Gameplay | Hardware | Personal | General"
+    }
+  ],
+  "sentiment": {
+    "score": 0.85, // number from -1.0 (toxic/angry) to 1.0 (hyped/celebrating)
+    "label": "Hyped | Laughing | Focused | Confused | Toxic"
+  },
+  "alerts": [
+    // e.g. "Audio is muted!", "Lag detected in game!", or empty array if none
+  ]
+}
+Be concise, accurate, and filter out spam or low-effort emote spam.`;
+
+  // 1. Try Gemini if configured
+  if (process.env.GEMINI_API_KEY) {
+    try {
+      const genAI = getGeminiClient();
+      const model = genAI.getGenerativeModel({
+        model: 'gemini-1.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json'
+        }
+      });
+      const result = await model.generateContent(
+        `${systemPrompt}\n\nIncoming Chat Log (${messages.length} messages):\n${chatText}`
+      );
+
+      const text = result.response.text();
+      return JSON.parse(text);
+    } catch (err) {
+      console.warn('Gemini analysis failed, falling back to OpenAI or simulator:', err.message);
+    }
+  }
+
+  // 2. Try OpenAI if configured
+  if (process.env.OPENAI_API_KEY) {
+    try {
+      const openai = getOpenAIClient();
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: `Incoming Chat Log (${messages.length} messages):\n${chatText}` }
+        ],
+        response_format: { type: 'json_object' }
+      });
+
+      return JSON.parse(completion.choices[0].message.content);
+    } catch (err) {
+      console.warn('OpenAI analysis failed, falling back to simulator:', err.message);
+    }
+  }
+
+  // 3. Fallback: Intelligent Local Parser (Simulator / offline mode)
+  return generateLocalAnalysis(messages);
+}
+
+/**
+ * High-speed fallback analyzer when no API keys are active or during tests
+ */
+function generateLocalAnalysis(messages) {
+  const questions = [];
+  let positiveScore = 0;
+  let negativeScore = 0;
+
+  const hypeWords = ['hype', 'pog', 'poggers', 'w', 'omg', 'clutch', 'letsgo', 'insane', 'love', 'lol', 'lmao', 'kekw'];
+  const confusedWords = ['what', 'why', 'how', 'lost', 'confused', 'where', 'wait'];
+  const negativeWords = ['l', 'throw', 'bad', 'lag', 'mute', 'scam', 'unlucky', 'choke'];
+
+  messages.forEach(m => {
+    const text = m.message.trim();
+    const lower = text.toLowerCase();
+
+    // Check for questions
+    if (text.includes('?') || lower.startsWith('can you') || lower.startsWith('what is') || lower.startsWith('why do')) {
+      if (questions.length < 5) {
+        questions.push({
+          user: m.user,
+          question: text,
+          category: lower.includes('pc') || lower.includes('spec') || lower.includes('mouse') ? 'Hardware' : 'General'
+        });
+      }
+    }
+
+    // Sentiment checks
+    hypeWords.forEach(w => { if (lower.includes(w)) positiveScore += 1; });
+    confusedWords.forEach(w => { if (lower.includes(w)) positiveScore += 0.5; });
+    negativeWords.forEach(w => { if (lower.includes(w)) negativeScore += 1; });
+  });
+
+  const total = Math.max(1, positiveScore + negativeScore);
+  const netScore = Math.min(1.0, Math.max(-1.0, (positiveScore - negativeScore) / total));
+
+  let label = 'Neutral';
+  if (netScore > 0.4) label = 'Hyped';
+  else if (positiveScore > 3 && netScore > 0) label = 'Laughing';
+  else if (netScore < -0.3) label = 'Frustrated';
+
+  return {
+    bullets: [
+      `Chat velocity is active with ${messages.length} messages in this cycle.`,
+      `Audience vibe is predominantly ${label} with high engagement.`,
+      `Key conversation focus: ${questions.length > 0 ? questions[0].question.slice(0, 50) + '...' : 'Gameplay reactions and emotes.'}`
+    ],
+    questions,
+    sentiment: {
+      score: Number(netScore.toFixed(2)),
+      label
+    },
+    alerts: messages.some(m => m.message.toLowerCase().includes('mute')) ? ['Chat reports possible audio mute!'] : []
+  };
+}
