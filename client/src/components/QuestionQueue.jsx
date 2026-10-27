@@ -1,5 +1,5 @@
 import React from 'react';
-import { HelpCircle, Pin, Check, PinOff, Tag } from 'lucide-react';
+import { HelpCircle, Pin, Check, PinOff, Tag, Users } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -7,6 +7,24 @@ export default function QuestionQueue() {
   const { questions, pinQuestion, unpinQuestion, markQuestionAnswered, pinnedQuestion } = useSocket();
 
   const activeQuestions = questions.filter(q => !q.isAnswered);
+  const normalizeQuestion = (value) => value.toLowerCase()
+    .replace(/[^a-z0-9 ]/g, ' ')
+    .split(/\s+/)
+    .filter(word => word && !['what', 'is', 'are', 'the', 'a', 'an', 'do', 'you', 'your', 'can', 'could', 'please', 'hey'].includes(word))
+    .sort()
+    .join(' ');
+  const groupedQuestions = [...activeQuestions.reduce((groups, question) => {
+    const key = normalizeQuestion(question.question);
+    const group = groups.get(key) || [];
+    group.push(question);
+    groups.set(key, group);
+    return groups;
+  }, new Map()).values()].map(items => ({
+    ...items[0],
+    groupItems: items,
+    repeatCount: items.reduce((total, item) => total + (Number(item.repeatCount) || 1), 0),
+    askers: [...new Set(items.flatMap(item => item.askers?.length ? item.askers : [item.user]).filter(Boolean))]
+  }));
 
   return (
     <div className="flex flex-col h-full bg-twitch-card border border-twitch-border rounded-xl p-4 shadow-sm">
@@ -17,7 +35,7 @@ export default function QuestionQueue() {
           <h2 className="font-semibold text-white">Viewer Questions</h2>
         </div>
         <span className="text-xs bg-twitch-bg text-twitch-accent font-semibold px-2 py-0.5 rounded border border-twitch-border">
-          {activeQuestions.length} in queue
+          {groupedQuestions.length} topics / {activeQuestions.length} questions
         </span>
       </div>
 
@@ -31,7 +49,7 @@ export default function QuestionQueue() {
           </div>
         ) : (
           <AnimatePresence>
-            {activeQuestions.map((q) => {
+            {groupedQuestions.map((q) => {
               const isPinned = pinnedQuestion?.id === q.id;
 
               return (
@@ -58,6 +76,7 @@ export default function QuestionQueue() {
                         )}
                       </div>
                       <p className="text-sm text-twitch-text font-medium leading-snug">{q.question}</p>
+                      {q.repeatCount > 1 && <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1"><span className="inline-flex items-center gap-1 rounded-full bg-twitch-purple/15 px-2 py-1 text-[10px] font-semibold text-twitch-purple"><Users className="h-3 w-3" /> Asked {q.repeatCount} times</span><span className="text-[10px] text-twitch-muted">{q.askers.slice(0, 3).map(user => `@${user}`).join(', ')}{q.askers.length > 3 ? ` +${q.askers.length - 3}` : ''}</span></div>}
                     </div>
 
                     {/* Actions */}
@@ -77,7 +96,7 @@ export default function QuestionQueue() {
 
                       {/* Mark Answered */}
                       <button
-                        onClick={() => markQuestionAnswered(q.id)}
+                        onClick={() => q.groupItems.forEach(item => markQuestionAnswered(item.id))}
                         className="p-1.5 rounded-lg border border-twitch-border bg-twitch-hover text-twitch-muted hover:text-twitch-accent hover:border-twitch-accent transition-colors"
                         title="Mark as Answered"
                       >
@@ -94,3 +113,4 @@ export default function QuestionQueue() {
     </div>
   );
 }
+

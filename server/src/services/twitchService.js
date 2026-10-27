@@ -1,6 +1,6 @@
 import tmi from 'tmi.js';
 import { analyzeChatBatch } from './aiService.js';
-import { broadcastToDashboard, broadcastToOverlay } from './socketService.js';
+import { broadcastToDashboard, broadcastToOverlay, broadcastToAll } from './socketService.js';
 import { Session } from '../models/Session.js';
 
 let tmiClient = null;
@@ -10,8 +10,14 @@ let recentMessageTimestamps = [];
 let intervalTimer = null;
 let simulatorTimer = null;
 let currentSessionDoc = null;
+let isSimulatorActive = false;
 
-const BATCH_INTERVAL_MS = 25000; // Run AI analysis every 25 seconds
+const BATCH_INTERVAL_MS = 15000; // 15-second cadence (fast & responsive for live demos)
+
+function emitTwitchStatus() {
+  const status = getStatus();
+  broadcastToAll('twitch_status', status);
+}
 
 /**
  * Connect to a Twitch Channel Chat
@@ -21,14 +27,15 @@ export async function connectToTwitchChannel(channelName) {
   const normalizedChannel = channelName.toLowerCase().replace('#', '').trim();
 
   // If already connected to this channel, return
-  if (currentChannel === normalizedChannel && tmiClient) {
+  if (currentChannel === normalizedChannel && tmiClient && !isSimulatorActive) {
     return { status: 'already_connected', channel: currentChannel };
   }
 
-  // Disconnect existing client if connected
+  // Await full cleanup of existing client / simulator
   await disconnectTwitch();
 
   currentChannel = normalizedChannel;
+  isSimulatorActive = false;
   messageBuffer = [];
   recentMessageTimestamps = [];
 
@@ -49,11 +56,8 @@ export async function connectToTwitchChannel(channelName) {
       timestamp: new Date()
     };
 
-    // Add to buffer
     messageBuffer.push(chatItem);
     recentMessageTimestamps.push(Date.now());
-
-    // Broadcast live chat item to dashboard
     broadcastToDashboard('raw_chat_message', chatItem);
   });
 
@@ -61,7 +65,6 @@ export async function connectToTwitchChannel(channelName) {
     await tmiClient.connect();
     console.log(`🔌 Connected to Twitch chat: #${normalizedChannel}`);
 
-    // Try to create session in MongoDB if available
     try {
       currentSessionDoc = await Session.create({
         channel: normalizedChannel,
@@ -71,25 +74,27 @@ export async function connectToTwitchChannel(channelName) {
       currentSessionDoc = { _id: Date.now(), channel: normalizedChannel };
     }
 
-    // Start 25-second AI digestion cycle
     startAnalysisCycle();
+    emitTwitchStatus();
 
     return { status: 'connected', channel: normalizedChannel };
   } catch (err) {
     console.error(`Failed to connect to Twitch #${normalizedChannel}:`, err.message);
+    currentChannel = null;
+    emitTwitchStatus();
     throw err;
   }
 }
 
 /**
- * Disconnect from Twitch
+ * Disconnect from Twitch and stop simulator
  */
 export async function disconnectTwitch() {
   if (intervalTimer) {
     clearInterval(intervalTimer);
     intervalTimer = null;
   }
-  stopSimulator();
+  stopSimulatorInternal();
 
   if (tmiClient) {
     try {
@@ -100,83 +105,86 @@ export async function disconnectTwitch() {
     tmiClient = null;
   }
   currentChannel = null;
+  isSimulatorActive = false;
   messageBuffer = [];
+  emitTwitchStatus();
 }
 
 /**
- * Starts the periodic batch intelligence pipeline
+ * Runs one batch intelligence pass
  */
-function startAnalysisCycle() {
-  if (intervalTimer) clearInterval(intervalTimer);
+export async function runAnalysisPass() {
+  if (!currentChannel || messageBuffer.length === 0) return null;
 
-  intervalTimer = setInterval(async () => {
-    if (!currentChannel) return;
+  const messagesToProcess = [...messageBuffer];
+  messageBuffer = []; // reset buffer for next cycle
 
-    const messagesToProcess = [...messageBuffer];
-    messageBuffer = []; // reset buffer for next window
+  const now = Date.now();
+  recentMessageTimestamps = recentMessageTimestamps.filter(t => now - t < 60000);
+  const msgsPerMinute = recentMessageTimestamps.length;
+  const msgsPerSecond = Number((msgsPerMinute / 60).toFixed(1));
 
-    // Calculate velocity (messages in last 60 seconds)
-    const now = Date.now();
-    recentMessageTimestamps = recentMessageTimestamps.filter(t => now - t < 60000);
-    const msgsPerMinute = recentMessageTimestamps.length;
-    const msgsPerSecond = Number((msgsPerMinute / 60).toFixed(1));
+  broadcastToDashboard('velocity_update', {
+    msgsPerMinute,
+    msgsPerSecond,
+    bufferSize: messagesToProcess.length
+  });
 
-    // Send velocity update
-    broadcastToDashboard('velocity_update', {
-      msgsPerMinute,
-      msgsPerSecond,
-      bufferSize: messagesToProcess.length
+  try {
+    console.log(`🧠 Running AI analysis on ${messagesToProcess.length} messages for #${currentChannel}...`);
+    const analysis = await analyzeChatBatch(messagesToProcess, currentChannel);
+
+    const payload = {
+      id: `${Date.now()}-${Math.random()}`,
+      timestamp: new Date(),
+      channel: currentChannel,
+      messageCount: messagesToProcess.length,
+      ...analysis
+    };
+
+    broadcastToDashboard('ai_summary_update', payload);
+
+    broadcastToOverlay('overlay_vibe_update', {
+      sentiment: analysis.sentiment
     });
 
-    if (messagesToProcess.length === 0) return;
-
-    try {
-      console.log(`🧠 Running AI analysis on ${messagesToProcess.length} messages for #${currentChannel}...`);
-      const analysis = await analyzeChatBatch(messagesToProcess, currentChannel);
-
-      const payload = {
-        timestamp: new Date(),
-        channel: currentChannel,
-        messageCount: messagesToProcess.length,
-        ...analysis
-      };
-
-      // Broadcast to Streamer Dashboard
-      broadcastToDashboard('ai_summary_update', payload);
-
-      // Broadcast vibe to on-stream OBS Overlay
-      broadcastToOverlay('overlay_vibe_update', {
-        sentiment: analysis.sentiment
+    if (currentSessionDoc && currentSessionDoc.summaries) {
+      currentSessionDoc.summaries.push({
+        bullets: analysis.bullets,
+        sentiment: analysis.sentiment,
+        alerts: analysis.alerts
       });
-
-      // Save to database if connected
-      if (currentSessionDoc && currentSessionDoc.summaries) {
-        currentSessionDoc.summaries.push({
-          bullets: analysis.bullets,
-          sentiment: analysis.sentiment,
-          alerts: analysis.alerts
-        });
-        currentSessionDoc.totalMessages += messagesToProcess.length;
-        currentSessionDoc.peakVelocity = Math.max(currentSessionDoc.peakVelocity || 0, msgsPerSecond);
-        currentSessionDoc.save?.().catch(() => {});
-      }
-    } catch (err) {
-      console.error('Error during batch analysis cycle:', err.message);
+      currentSessionDoc.totalMessages += messagesToProcess.length;
+      currentSessionDoc.peakVelocity = Math.max(currentSessionDoc.peakVelocity || 0, msgsPerSecond);
+      currentSessionDoc.save?.().catch(() => {});
     }
-  }, BATCH_INTERVAL_MS);
+
+    return payload;
+  } catch (err) {
+    console.error('Error during batch analysis cycle:', err.message);
+    return null;
+  }
+}
+
+function startAnalysisCycle() {
+  if (intervalTimer) clearInterval(intervalTimer);
+  intervalTimer = setInterval(runAnalysisPass, BATCH_INTERVAL_MS);
 }
 
 /**
- * Realistic Twitch Chat Simulator (for testing without a live stream)
+ * Realistic Twitch Chat Simulator (Async and race-free)
  */
-export function startSimulator(channelName = 'demo_stream') {
-  disconnectTwitch();
+export async function startSimulator(channelName = 'demo_stream') {
+  // AWAIT the disconnect to prevent race conditions
+  await disconnectTwitch();
+
   currentChannel = channelName;
+  isSimulatorActive = true;
   console.log('🎮 Simulator started for channel:', channelName);
 
   const sampleUsers = ['KittenSlayer99', 'PixelKnight', 'CodeNinja', 'CyberValkyrie', 'GamerGuy_24', 'CoffeeCoder', 'ShadowStrike', 'Nova_x'];
   const sampleMessages = [
-    'LETS GOOOOOO!! W',
+    'LETS GOOOOOO!! W game',
     'What mouse sensitivity do you play on?',
     'Bro that flick was unbelievable LMAO',
     'KEKW KEKW KEKW',
@@ -187,7 +195,7 @@ export function startSimulator(channelName = 'demo_stream') {
     'PogChamp PogChamp',
     'What rank are you currently aiming for this season?',
     'HYPE HYPE HYPE',
-    'Check your discord, mods sent an update'
+    'Can you show your controller keybinds?'
   ];
 
   startAnalysisCycle();
@@ -200,7 +208,7 @@ export function startSimulator(channelName = 'demo_stream') {
       id: `${Date.now()}-${Math.random()}`,
       user: randomUser,
       color: '#9146FF',
-      badges: { broadcaster: '1' },
+      badges: { subscriber: '1' },
       message: randomMsg,
       timestamp: new Date()
     };
@@ -208,17 +216,23 @@ export function startSimulator(channelName = 'demo_stream') {
     messageBuffer.push(chatItem);
     recentMessageTimestamps.push(Date.now());
     broadcastToDashboard('raw_chat_message', chatItem);
-  }, 1200);
+  }, 1000);
 
+  emitTwitchStatus();
   return { status: 'simulator_running', channel: channelName };
 }
 
-export function stopSimulator() {
+function stopSimulatorInternal() {
   if (simulatorTimer) {
     clearInterval(simulatorTimer);
     simulatorTimer = null;
-    console.log('🛑 Simulator stopped.');
   }
+  isSimulatorActive = false;
+}
+
+export async function stopSimulator() {
+  stopSimulatorInternal();
+  await disconnectTwitch();
 }
 
 export function getStatus() {
@@ -226,8 +240,8 @@ export function getStatus() {
   recentMessageTimestamps = recentMessageTimestamps.filter(t => now - t < 60000);
   return {
     channel: currentChannel,
-    isConnected: !!tmiClient || !!simulatorTimer,
-    isSimulator: !!simulatorTimer,
+    isTwitchConnected: !!tmiClient && !isSimulatorActive,
+    isSimulator: isSimulatorActive,
     bufferedMessages: messageBuffer.length,
     velocity: {
       msgsPerMinute: recentMessageTimestamps.length,

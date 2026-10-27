@@ -51,9 +51,11 @@ Analyze the provided chat batch and return ONLY a valid JSON object matching thi
   ],
   "questions": [
     {
-      "user": "username",
-      "question": "Clear, concise extracted question directed at the streamer",
-      "category": "Gameplay | Hardware | Personal | General"
+      "user": "username of the first asker",
+      "question": "Canonical, concise version of the audience's question",
+      "category": "Gameplay | Hardware | Personal | General",
+      "repeatCount": 1,
+      "askers": ["username"]
     }
   ],
   "sentiment": {
@@ -64,7 +66,7 @@ Analyze the provided chat batch and return ONLY a valid JSON object matching thi
     // e.g. "Audio is muted!", "Lag detected in game!", or empty array if none
   ]
 }
-Be concise, accurate, and filter out spam or low-effort emote spam.`;
+Be concise, accurate, and filter out spam or low-effort emote spam. Consolidate questions that ask for the same thing even when phrased differently (for example, "what sens do you use?" and "what's your mouse sensitivity?"). Return one canonical question for that intent, set repeatCount to the number of distinct chat messages, and include the usernames in askers. Do not merge questions that share a topic but ask for different information. For a single question, repeatCount is 1.`;
 
   // 1. Try Gemini if configured
   if (process.env.GEMINI_API_KEY) {
@@ -81,7 +83,7 @@ Be concise, accurate, and filter out spam or low-effort emote spam.`;
       );
 
       const text = result.response.text();
-      return JSON.parse(text);
+      return sanitizeAnalysis(JSON.parse(text), messages);
     } catch (err) {
       console.warn('Gemini analysis failed, falling back to OpenAI or simulator:', err.message);
     }
@@ -100,19 +102,48 @@ Be concise, accurate, and filter out spam or low-effort emote spam.`;
         response_format: { type: 'json_object' }
       });
 
-      return JSON.parse(completion.choices[0].message.content);
+      return sanitizeAnalysis(JSON.parse(completion.choices[0].message.content), messages);
     } catch (err) {
       console.warn('OpenAI analysis failed, falling back to simulator:', err.message);
     }
   }
 
   // 3. Fallback: Intelligent Local Parser (Simulator / offline mode)
-  return generateLocalAnalysis(messages);
+  return sanitizeAnalysis(generateLocalAnalysis(messages), messages);
 }
 
-/**
- * High-speed fallback analyzer when no API keys are active or during tests
- */
+function sanitizeAnalysis(data, fallbackMessages) {
+  if (!data || typeof data !== 'object') {
+    return generateLocalAnalysis(fallbackMessages);
+  }
+
+  const bullets = Array.isArray(data.bullets) && data.bullets.length > 0
+    ? data.bullets.map(b => String(b).trim())
+    : ['Audience is actively chatting in the channel.', 'Chat engagement is steady.'];
+
+  const questions = Array.isArray(data.questions)
+    ? data.questions
+        .filter(q => q && typeof q === 'object' && q.question)
+        .map(q => ({
+          user: String(q.user || 'Viewer').trim(),
+          question: String(q.question).trim(),
+          category: String(q.category || 'General').trim()
+        }))
+    : [];
+
+  const sentimentObj = data.sentiment && typeof data.sentiment === 'object' ? data.sentiment : {};
+  const score = typeof sentimentObj.score === 'number' ? Math.max(-1.0, Math.min(1.0, sentimentObj.score)) : 0.5;
+  const label = sentimentObj.label || (score > 0.3 ? 'Hyped' : 'Neutral');
+
+  const alerts = Array.isArray(data.alerts) ? data.alerts.map(a => String(a)) : [];
+
+  return {
+    bullets,
+    questions,
+    sentiment: { score, label },
+    alerts
+  };
+}
 function generateLocalAnalysis(messages) {
   const questions = [];
   let positiveScore = 0;

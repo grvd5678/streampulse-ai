@@ -4,37 +4,33 @@ import SummaryFeed from '../components/SummaryFeed';
 import QuestionQueue from '../components/QuestionQueue';
 import SentimentGauge from '../components/SentimentGauge';
 import LiveChatFeed from '../components/LiveChatFeed';
-import { Key, Sparkles, X, Check } from 'lucide-react';
+import { Key, Sparkles, X, Check, AlertCircle } from 'lucide-react';
+import { useSocket } from '../context/SocketContext';
 
 export default function Dashboard() {
   const [currentChannel, setCurrentChannel] = useState('shroud');
-  const [isSimulator, setIsSimulator] = useState(false);
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [openaiKeyInput, setOpenaiKeyInput] = useState('');
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
   const [keySavedMessage, setKeySavedMessage] = useState('');
+  const [keyErrorMessage, setKeyErrorMessage] = useState('');
 
-  // Fetch initial status
+  const { twitchStatus } = useSocket();
+
   useEffect(() => {
-    fetch('http://localhost:5000/api/status')
-      .then(res => res.json())
-      .then(data => {
-        if (data.channel) setCurrentChannel(data.channel);
-        setIsSimulator(data.isSimulator);
-      })
-      .catch(() => {});
-  }, []);
+    if (twitchStatus.channel) {
+      setCurrentChannel(twitchStatus.channel);
+    }
+  }, [twitchStatus.channel]);
 
   const handleConnect = async (channel) => {
     try {
-      const res = await fetch('http://localhost:5000/api/channel/connect', {
+      await fetch('http://localhost:5000/api/channel/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel })
       });
-      const data = await res.json();
       setCurrentChannel(channel);
-      setIsSimulator(false);
     } catch (err) {
       console.error('Failed to connect:', err);
     }
@@ -43,7 +39,6 @@ export default function Dashboard() {
   const handleDisconnect = async () => {
     try {
       await fetch('http://localhost:5000/api/channel/disconnect', { method: 'POST' });
-      setIsSimulator(false);
     } catch (err) {
       console.error('Failed to disconnect:', err);
     }
@@ -56,7 +51,6 @@ export default function Dashboard() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel })
       });
-      setIsSimulator(true);
       setCurrentChannel(channel || 'demo_stream');
     } catch (err) {
       console.error('Failed to start simulator:', err);
@@ -66,7 +60,6 @@ export default function Dashboard() {
   const handleStopSimulator = async () => {
     try {
       await fetch('http://localhost:5000/api/simulator/stop', { method: 'POST' });
-      setIsSimulator(false);
     } catch (err) {
       console.error('Failed to stop simulator:', err);
     }
@@ -74,6 +67,9 @@ export default function Dashboard() {
 
   const handleSaveKeys = async (e) => {
     e.preventDefault();
+    setKeyErrorMessage('');
+    setKeySavedMessage('');
+
     try {
       const res = await fetch('http://localhost:5000/api/config/keys', {
         method: 'POST',
@@ -83,14 +79,19 @@ export default function Dashboard() {
           geminiKey: geminiKeyInput.trim()
         })
       });
+
+      if (!res.ok) {
+        throw new Error('Server rejected key configuration');
+      }
+
       const data = await res.json();
-      setKeySavedMessage('API Keys saved successfully!');
+      setKeySavedMessage('API keys successfully saved & persisted to .env!');
       setTimeout(() => {
         setKeySavedMessage('');
         setShowKeyModal(false);
       }, 1500);
     } catch (err) {
-      console.error('Failed to save keys:', err);
+      setKeyErrorMessage(err.message || 'Failed to save keys');
     }
   };
 
@@ -103,7 +104,6 @@ export default function Dashboard() {
         onDisconnect={handleDisconnect}
         onStartSimulator={handleStartSimulator}
         onStopSimulator={handleStopSimulator}
-        isSimulator={isSimulator}
       />
 
       {/* Main Streamer Co-Pilot Grid */}
@@ -130,8 +130,12 @@ export default function Dashboard() {
       {/* Bottom Floating Bar */}
       <div className="px-6 py-2 border-t border-twitch-border bg-twitch-card flex items-center justify-between text-xs text-twitch-muted">
         <div className="flex items-center gap-2">
-          <span>Target Channel: <strong className="text-white">#{currentChannel}</strong></span>
-          {isSimulator && <span className="bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded text-[10px] font-semibold">Simulator Active</span>}
+          <span>Active Channel: <strong className="text-white">#{currentChannel}</strong></span>
+          {twitchStatus.isSimulator && (
+            <span className="bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded text-[10px] font-semibold">
+              Simulator Active
+            </span>
+          )}
         </div>
 
         <button
@@ -160,7 +164,7 @@ export default function Dashboard() {
             </div>
 
             <p className="text-xs text-twitch-muted mb-4 leading-relaxed">
-              StreamPulse uses either OpenAI or Google Gemini for live chat summaries. If no keys are provided, it automatically runs in high-speed intelligent simulator mode.
+              Keys are securely stored in your local <code className="text-twitch-purple">.env</code> file. StreamPulse works with either OpenAI or Google Gemini.
             </p>
 
             <form onSubmit={handleSaveKeys} className="space-y-4">
@@ -194,6 +198,13 @@ export default function Dashboard() {
                 <div className="p-2 rounded bg-green-500/10 border border-green-500/30 text-xs text-green-400 flex items-center gap-1.5">
                   <Check className="h-3.5 w-3.5" />
                   {keySavedMessage}
+                </div>
+              )}
+
+              {keyErrorMessage && (
+                <div className="p-2 rounded bg-red-500/10 border border-red-500/30 text-xs text-red-400 flex items-center gap-1.5">
+                  <AlertCircle className="h-3.5 w-3.5" />
+                  {keyErrorMessage}
                 </div>
               )}
 

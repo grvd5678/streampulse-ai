@@ -1,10 +1,10 @@
 import React from 'react';
-import { Sparkles, Clock, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { Sparkles, Clock, AlertTriangle, CheckCircle2, BookmarkPlus, BookmarkCheck } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function SummaryFeed() {
-  const { summaries, alerts } = useSocket();
+  const { summaries, alerts, highlights, saveHighlight } = useSocket();
 
   return (
     <div className="flex flex-col h-full bg-twitch-card border border-twitch-border rounded-xl p-4 shadow-sm">
@@ -15,7 +15,7 @@ export default function SummaryFeed() {
           <h2 className="font-semibold text-white">AI Stream Digest</h2>
         </div>
         <span className="text-xs bg-twitch-bg text-twitch-muted px-2 py-0.5 rounded border border-twitch-border">
-          Rolling 30s Cycles
+          {summaries[0]?.timestamp ? `Updated ${new Date(summaries[0].timestamp).toLocaleTimeString()}` : 'Waiting for first digest'}
         </span>
       </div>
 
@@ -58,9 +58,10 @@ export default function SummaryFeed() {
                       <Clock className="h-3 w-3" />
                       {timeStr}
                     </span>
-                    <span className="rounded bg-twitch-bg px-2 py-0.5 text-[10px] text-twitch-muted border border-twitch-border">
-                      {item.messageCount || 0} msgs digested
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="rounded bg-twitch-bg px-2 py-0.5 text-[10px] text-twitch-muted border border-twitch-border">{item.messageCount || 0} msgs</span>
+                      <button onClick={() => saveHighlight({ timestamp: item.timestamp, title: 'Chat digest saved', bullets: item.bullets })} className="inline-flex items-center gap-1 rounded border border-twitch-border px-2 py-1 text-[10px] font-semibold text-twitch-muted hover:border-twitch-purple hover:text-white" title="Save this digest to review after stream"><BookmarkPlus className="h-3 w-3" /> Save moment</button>
+                    </div>
                   </div>
 
                   <ul className="space-y-1.5 text-sm text-twitch-text">
@@ -76,7 +77,12 @@ export default function SummaryFeed() {
             })}
           </AnimatePresence>
         )}
+        {highlights.length > 0 && <div className="mt-4 border-t border-twitch-border pt-3">
+          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-twitch-accent"><BookmarkCheck className="h-3.5 w-3.5" /> Saved for after stream ({highlights.length})</div>
+          {highlights.slice(0, 3).map(item => <div key={item.id} className="mb-2 rounded-lg border border-twitch-border bg-twitch-bg p-2.5 text-xs text-twitch-text"><div className="mb-1 text-[10px] text-twitch-muted">{new Date(item.timestamp).toLocaleTimeString()} · {item.title}</div>{item.details}</div>)}
+        </div>}
       </div>
     </div>
   );
 }
+
