@@ -2,7 +2,17 @@
 > **Real-Time Twitch Chat Intelligence & AI Stream Co-Pilot**  
 > *Built for the Codex x TwitchCon Hackathon*
 
-StreamPulse AI transforms high-speed, overwhelming Twitch chat into actionable real-time intelligence for live streamers. Instead of missing questions or relying on human moderators, StreamPulse acts as an automated AI co-pilot running directly on the streamer's second monitor and OBS broadcast overlay.
+Fast-moving chat forces live streamers to choose between playing the game and acknowledging their community. **StreamPulse AI** turns chaotic chat into a focused co-pilot: it surfaces high-value viewer questions and lets the streamer bring one directly onto the broadcast overlay with one click, so they can acknowledge their audience without losing focus.
+
+---
+
+## 🎯 The Core Problem & Our Solution
+* **The Problem**: During intense gameplay or coding streams, chat moves too fast to read. Critical viewer questions get swallowed by emote spam and meme trains.
+* **The StreamPulse Solution**: 
+  1. An intelligent real-time **Streamer Co-Pilot Dashboard** on your second monitor.
+  2. Automatic extraction of genuine audience questions categorized by topic.
+  3. A **one-click OBS Stream Spotlight** that projects the selected question onto the live broadcast for viewers to see.
+  4. Rolling AI digests and live audience mood tracking.
 
 ---
 
