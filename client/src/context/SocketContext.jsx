@@ -153,18 +153,19 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
 
   const triggerAnalyzeNow = async () => {
     setIsAnalyzing(true);
-
-    // Safety timeout: guaranteed reset if socket event is missed
-    const safetyTimer = setTimeout(() => {
-      setIsAnalyzing(false);
-    }, 4500);
-
     try {
-      await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
+      const res = await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
+      if (res.ok) {
+        const data = await res.json();
+        // Fallback update in case websocket is delayed
+        if (data?.result?.id) {
+          setSummaries(prev => prev.some(item => item.id === data.result.id) ? prev : [data.result, ...prev.slice(0, 19)]);
+        }
+      }
     } catch (e) {
       console.error('Failed to trigger manual analysis:', e);
-      clearTimeout(safetyTimer);
-      setIsAnalyzing(false);
+    } finally {
+      setIsAnalyzing(false); // Deterministic reset: guaranteed never stuck
     }
   };
 
