@@ -130,7 +130,7 @@ export default function Dashboard() {
       {/* Bottom Floating Bar */}
       <div className="px-6 py-2 border-t border-twitch-border bg-twitch-card flex items-center justify-between text-xs text-twitch-muted">
         <div className="flex items-center gap-2">
-          <span>Active Channel: <strong className="text-white">#{currentChannel}</strong></span>
+          <span>Active Target: <strong className="text-white">{twitchStatus.channel ? `#${twitchStatus.channel}` : 'None (Idle)'}</strong></span>
           {twitchStatus.isSimulator && (
             <span className="bg-orange-500/20 text-orange-400 px-1.5 py-0.5 rounded text-[10px] font-semibold">
               Simulator Active
@@ -164,7 +164,7 @@ export default function Dashboard() {
             </div>
 
             <p className="text-xs text-twitch-muted mb-4 leading-relaxed">
-              Keys are securely stored in your local <code className="text-twitch-purple">.env</code> file. StreamPulse works with either OpenAI or Google Gemini.
+              Keys are stored locally in your development <code className="text-twitch-purple">server/.env</code> file for local testing and hackathon demo runs.
             </p>
 
             <form onSubmit={handleSaveKeys} className="space-y-4">

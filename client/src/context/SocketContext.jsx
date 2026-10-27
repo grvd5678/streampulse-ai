@@ -15,7 +15,7 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
   });
   const [summaries, setSummaries] = useState([]);
   const [questions, setQuestions] = useState([]);
-  const [sentiment, setSentiment] = useState({ score: 0.85, label: 'Hyped' });
+  const [sentiment, setSentiment] = useState({ score: 0.0, label: 'Neutral' });
   const [velocity, setVelocity] = useState({ msgsPerMinute: 0, msgsPerSecond: 0 });
   const [rawMessages, setRawMessages] = useState([]);
   const [pinnedQuestion, setPinnedQuestion] = useState(null);
@@ -142,9 +142,13 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
   const triggerAnalyzeNow = async () => {
     setIsAnalyzing(true);
     try {
-      await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
+      const res = await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
+      if (!res.ok) console.warn('Analyze now returned non-200');
     } catch (e) {
-      setIsAnalyzing(false);
+      console.error('Failed to trigger manual analysis:', e);
+    } finally {
+      // Guaranteed to unstick the button
+      setTimeout(() => setIsAnalyzing(false), 1200);
     }
   };
 

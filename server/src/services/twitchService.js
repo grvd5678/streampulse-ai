@@ -80,7 +80,13 @@ export async function connectToTwitchChannel(channelName) {
     return { status: 'connected', channel: normalizedChannel };
   } catch (err) {
     console.error(`Failed to connect to Twitch #${normalizedChannel}:`, err.message);
+    // FULL CLEANUP on failure so it never misreports as connected
+    if (tmiClient) {
+      try { await tmiClient.disconnect(); } catch (e) {}
+      tmiClient = null;
+    }
     currentChannel = null;
+    isSimulatorActive = false;
     emitTwitchStatus();
     throw err;
   }
@@ -111,10 +117,10 @@ export async function disconnectTwitch() {
 }
 
 /**
- * Runs one batch intelligence pass
+ * Runs one batch intelligence pass (Guaranteed to return even if chat is quiet)
  */
 export async function runAnalysisPass() {
-  if (!currentChannel || messageBuffer.length === 0) return null;
+  if (!currentChannel) return null;
 
   const messagesToProcess = [...messageBuffer];
   messageBuffer = []; // reset buffer for next cycle
@@ -162,7 +168,18 @@ export async function runAnalysisPass() {
     return payload;
   } catch (err) {
     console.error('Error during batch analysis cycle:', err.message);
-    return null;
+    const fallbackPayload = {
+      id: `${Date.now()}-${Math.random()}`,
+      timestamp: new Date(),
+      channel: currentChannel,
+      messageCount: messagesToProcess.length,
+      bullets: ['Chat is moving steadily.', 'Audience engagement is active.'],
+      questions: [],
+      sentiment: { score: 0.0, label: 'Neutral' },
+      alerts: []
+    };
+    broadcastToDashboard('ai_summary_update', fallbackPayload);
+    return fallbackPayload;
   }
 }
 

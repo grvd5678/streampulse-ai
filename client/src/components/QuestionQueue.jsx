@@ -66,12 +66,17 @@ export default function QuestionQueue() {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <div className="flex items-center gap-1.5 mb-1">
+                      <div className="flex items-center gap-1.5 mb-1 flex-wrap">
                         <span className="font-semibold text-xs text-white">@{q.user}</span>
                         {q.category && (
                           <span className="text-[10px] bg-twitch-hover px-1.5 py-0.2 text-twitch-muted rounded border border-twitch-border flex items-center gap-0.5">
                             <Tag className="h-2.5 w-2.5" />
                             {q.category}
+                          </span>
+                        )}
+                        {q.repeatCount > 1 && (
+                          <span className="text-[10px] bg-orange-500/20 text-orange-400 font-bold px-1.5 py-0.2 rounded border border-orange-500/40">
+                            🔥 Asked by {q.repeatCount} viewers
                           </span>
                         )}
                       </div>

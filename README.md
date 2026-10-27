@@ -19,11 +19,12 @@ Fast-moving chat forces live streamers to choose between playing the game and ac
 ## 🚀 Key Features
 
 * **Instant Twitch IRC Ingestion**: Connect to any live Twitch channel (`#shroud`, `#tarik`, or your own) in seconds using `tmi.js` with zero OAuth friction.
-* **30-Second Rolling AI Digest**: Batches incoming chat messages into 3 concise bullet points summarizing what viewers are reacting to, community memes, and tips.
-* **Smart Viewer Question Queue**: Extracts genuine questions asked by the audience with categorized tags (`Gameplay`, `Hardware`, `Personal`, `General`), complete with a **"Pin to OBS Overlay"** button and **"Mark Answered"** workflow.
-* **Live Audience Vibe Meter**: Real-time sentiment gauge ranging from `-1.0` (Frustrated/Toxic) to `+1.0` (Hyped/Excited) with dynamic mood labeling.
-* **Transparent OBS Studio Browser Source**: Dedicated `/overlay` route with a transparent background that floats pinned questions and live chat vibes directly over game broadcasts.
-* **Zero-Setup Interactive Simulator**: Includes a built-in high-speed chat simulator so you can test all AI pipelines and demo the app without needing a live stream running.
+* **15-Second Rolling AI Digest**: Batches incoming chat messages every 15 seconds into 3 concise bullet points summarizing what viewers are reacting to, community memes, and tips.
+* **Smart Viewer Question Queue**: Extracts genuine questions asked by the audience with categorized tags (`Gameplay`, `Hardware`, `Personal`, `General`) and deduplicates repeated questions with viewer counts.
+* **One-Click OBS Stream Spotlight**: Streamer can click **Pin** on any question to instantly animate it onto the live broadcast overlay.
+* **Live Audience Vibe Meter**: Real-time sentiment gauge ranging from `-1.0` (Frustrated/Toxic) to `+1.0` (Hyped/Excited) using exact word-boundary token matching.
+* **Transparent OBS Studio Browser Source**: Dedicated `/overlay` route with a transparent background that retains pinned questions even when refreshed or opened late.
+* **Zero-Setup Interactive Simulator & "Analyze Now" Button**: Includes a high-speed chat simulator and an on-demand analysis trigger for fast, repeatable demo videos.
 
 ---
 

@@ -1,6 +1,6 @@
 let ioInstance = null;
 let currentlyPinnedQuestion = null;
-let lastKnownSentiment = { score: 0.85, label: 'Hyped' };
+let lastKnownSentiment = { score: 0.0, label: 'Neutral' };
 
 export function initSocketIO(io) {
   ioInstance = io;

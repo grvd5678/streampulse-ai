@@ -127,13 +127,15 @@ function sanitizeAnalysis(data, fallbackMessages) {
         .map(q => ({
           user: String(q.user || 'Viewer').trim(),
           question: String(q.question).trim(),
-          category: String(q.category || 'General').trim()
+          category: String(q.category || 'General').trim(),
+          repeatCount: typeof q.repeatCount === 'number' && q.repeatCount > 1 ? q.repeatCount : 1,
+          askers: Array.isArray(q.askers) && q.askers.length > 0 ? q.askers.map(String) : [String(q.user || 'Viewer')]
         }))
     : [];
 
   const sentimentObj = data.sentiment && typeof data.sentiment === 'object' ? data.sentiment : {};
-  const score = typeof sentimentObj.score === 'number' ? Math.max(-1.0, Math.min(1.0, sentimentObj.score)) : 0.5;
-  const label = sentimentObj.label || (score > 0.3 ? 'Hyped' : 'Neutral');
+  const score = typeof sentimentObj.score === 'number' ? Math.max(-1.0, Math.min(1.0, sentimentObj.score)) : 0.0;
+  const label = sentimentObj.label || (score > 0.35 ? 'Hyped' : score < -0.3 ? 'Frustrated' : 'Neutral');
 
   const alerts = Array.isArray(data.alerts) ? data.alerts.map(a => String(a)) : [];
 
@@ -144,55 +146,72 @@ function sanitizeAnalysis(data, fallbackMessages) {
     alerts
   };
 }
+
 function generateLocalAnalysis(messages) {
-  const questions = [];
+  const rawQuestions = [];
   let positiveScore = 0;
   let negativeScore = 0;
 
-  const hypeWords = ['hype', 'pog', 'poggers', 'w', 'omg', 'clutch', 'letsgo', 'insane', 'love', 'lol', 'lmao', 'kekw'];
-  const confusedWords = ['what', 'why', 'how', 'lost', 'confused', 'where', 'wait'];
-  const negativeWords = ['l', 'throw', 'bad', 'lag', 'mute', 'scam', 'unlucky', 'choke'];
+  // Word boundaries so "w" won't match "what/will/power" and "l" won't match "play/look"
+  const hypePattern = /\b(w|pog|poggers|hype|gg|clutch|letsgo|insane|love|lol|lmao|kekw|fire)\b/i;
+  const confusedPattern = /\b(what|why|how|lost|confused|where|wait)\b/i;
+  const negativePattern = /\b(l|throw|bad|lag|mute|muted|scam|unlucky|choke|trash|toxic)\b/i;
 
   messages.forEach(m => {
     const text = m.message.trim();
     const lower = text.toLowerCase();
 
     // Check for questions
-    if (text.includes('?') || lower.startsWith('can you') || lower.startsWith('what is') || lower.startsWith('why do')) {
-      if (questions.length < 5) {
-        questions.push({
-          user: m.user,
-          question: text,
-          category: lower.includes('pc') || lower.includes('spec') || lower.includes('mouse') ? 'Hardware' : 'General'
-        });
-      }
+    if (text.includes('?') || lower.startsWith('can you') || lower.startsWith('what is') || lower.startsWith('why do') || lower.startsWith('how do')) {
+      rawQuestions.push({
+        user: m.user,
+        question: text,
+        category: lower.includes('pc') || lower.includes('spec') || lower.includes('mouse') || lower.includes('sens') ? 'Hardware' : lower.includes('rank') || lower.includes('play') || lower.includes('item') ? 'Gameplay' : 'General'
+      });
     }
 
-    // Sentiment checks
-    hypeWords.forEach(w => { if (lower.includes(w)) positiveScore += 1; });
-    confusedWords.forEach(w => { if (lower.includes(w)) positiveScore += 0.5; });
-    negativeWords.forEach(w => { if (lower.includes(w)) negativeScore += 1; });
+    if (hypePattern.test(text)) positiveScore += 1;
+    if (confusedPattern.test(text)) positiveScore += 0.5;
+    if (negativePattern.test(text)) negativeScore += 1;
+  });
+
+  // Cluster similar questions (deduplication & repeat counting)
+  const clusteredQuestions = [];
+  rawQuestions.forEach(q => {
+    const existing = clusteredQuestions.find(c => 
+      c.question.toLowerCase().slice(0, 20) === q.question.toLowerCase().slice(0, 20)
+    );
+    if (existing) {
+      existing.repeatCount = (existing.repeatCount || 1) + 1;
+      if (!existing.askers.includes(q.user)) existing.askers.push(q.user);
+    } else {
+      clusteredQuestions.push({
+        ...q,
+        repeatCount: 1,
+        askers: [q.user]
+      });
+    }
   });
 
   const total = Math.max(1, positiveScore + negativeScore);
   const netScore = Math.min(1.0, Math.max(-1.0, (positiveScore - negativeScore) / total));
 
   let label = 'Neutral';
-  if (netScore > 0.4) label = 'Hyped';
+  if (netScore > 0.35) label = 'Hyped';
   else if (positiveScore > 3 && netScore > 0) label = 'Laughing';
   else if (netScore < -0.3) label = 'Frustrated';
 
   return {
     bullets: [
       `Chat velocity is active with ${messages.length} messages in this cycle.`,
-      `Audience vibe is predominantly ${label} with high engagement.`,
-      `Key conversation focus: ${questions.length > 0 ? questions[0].question.slice(0, 50) + '...' : 'Gameplay reactions and emotes.'}`
+      `Audience vibe is currently ${label} with steady engagement.`,
+      `Key conversation focus: ${clusteredQuestions.length > 0 ? clusteredQuestions[0].question.slice(0, 50) + '...' : 'Gameplay reactions and emotes.'}`
     ],
-    questions,
+    questions: clusteredQuestions.slice(0, 6),
     sentiment: {
       score: Number(netScore.toFixed(2)),
       label
     },
-    alerts: messages.some(m => m.message.toLowerCase().includes('mute')) ? ['Chat reports possible audio mute!'] : []
+    alerts: messages.some(m => /\b(mute|muted|no sound)\b/i.test(m.message)) ? ['Chat reports possible audio mute!'] : []
   };
 }
