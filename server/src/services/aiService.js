@@ -147,15 +147,38 @@ function sanitizeAnalysis(data, fallbackMessages) {
   };
 }
 
+function getQuestionTokens(text) {
+  return new Set(
+    text.toLowerCase()
+      .replace(/[^\w\s]/g, '')
+      .split(/\s+/)
+      .filter(w => w.length > 2 && !['what', 'why', 'how', 'the', 'you', 'your', 'can'].includes(w))
+  );
+}
+
+function areQuestionsSimilar(q1, q2) {
+  const t1 = getQuestionTokens(q1);
+  const t2 = getQuestionTokens(q2);
+  if (t1.size === 0 || t2.size === 0) return false;
+
+  let intersection = 0;
+  for (const word of t1) {
+    if (t2.has(word)) intersection++;
+  }
+  const union = new Set([...t1, ...t2]).size;
+  return (intersection / union) >= 0.5; // 50% core keyword match
+}
+
 function generateLocalAnalysis(messages) {
   const rawQuestions = [];
   let positiveScore = 0;
   let negativeScore = 0;
+  let confusedScore = 0;
 
-  // Word boundaries so "w" won't match "what/will/power" and "l" won't match "play/look"
-  const hypePattern = /\b(w|pog|poggers|hype|gg|clutch|letsgo|insane|love|lol|lmao|kekw|fire)\b/i;
-  const confusedPattern = /\b(what|why|how|lost|confused|where|wait)\b/i;
-  const negativePattern = /\b(l|throw|bad|lag|mute|muted|scam|unlucky|choke|trash|toxic)\b/i;
+  // Strict word boundaries so letters alone never match
+  const hypePattern = /\b(w|pog|poggers|hype|gg|clutch|letsgo|insane|love|lol|lmao|kekw|fire|goat)\b/i;
+  const confusedPattern = /\b(what|why|how|lost|confused|where|wait|huh)\b/i;
+  const negativePattern = /\b(l|throw|bad|lag|mute|muted|scam|unlucky|choke|trash|toxic|cringe)\b/i;
 
   messages.forEach(m => {
     const text = m.message.trim();
@@ -166,21 +189,23 @@ function generateLocalAnalysis(messages) {
       rawQuestions.push({
         user: m.user,
         question: text,
-        category: lower.includes('pc') || lower.includes('spec') || lower.includes('mouse') || lower.includes('sens') ? 'Hardware' : lower.includes('rank') || lower.includes('play') || lower.includes('item') ? 'Gameplay' : 'General'
+        category: lower.includes('pc') || lower.includes('spec') || lower.includes('mouse') || lower.includes('sens') 
+          ? 'Hardware' 
+          : lower.includes('rank') || lower.includes('play') || lower.includes('item') || lower.includes('build') 
+          ? 'Gameplay' 
+          : 'General'
       });
     }
 
     if (hypePattern.test(text)) positiveScore += 1;
-    if (confusedPattern.test(text)) positiveScore += 0.5;
     if (negativePattern.test(text)) negativeScore += 1;
+    if (confusedPattern.test(text)) confusedScore += 1;
   });
 
-  // Cluster similar questions (deduplication & repeat counting)
+  // Accurate keyword-based question clustering (no fragile character slicing!)
   const clusteredQuestions = [];
   rawQuestions.forEach(q => {
-    const existing = clusteredQuestions.find(c => 
-      c.question.toLowerCase().slice(0, 20) === q.question.toLowerCase().slice(0, 20)
-    );
+    const existing = clusteredQuestions.find(c => areQuestionsSimilar(c.question, q.question));
     if (existing) {
       existing.repeatCount = (existing.repeatCount || 1) + 1;
       if (!existing.askers.includes(q.user)) existing.askers.push(q.user);
@@ -193,25 +218,30 @@ function generateLocalAnalysis(messages) {
     }
   });
 
-  const total = Math.max(1, positiveScore + negativeScore);
-  const netScore = Math.min(1.0, Math.max(-1.0, (positiveScore - negativeScore) / total));
+  // Accurate sentiment math: net positive vs negative
+  const totalSignals = Math.max(1, positiveScore + negativeScore);
+  const netScore = Math.min(1.0, Math.max(-1.0, (positiveScore - negativeScore) / totalSignals));
 
   let label = 'Neutral';
-  if (netScore > 0.35) label = 'Hyped';
-  else if (positiveScore > 3 && netScore > 0) label = 'Laughing';
-  else if (netScore < -0.3) label = 'Frustrated';
+  if (positiveScore > negativeScore && positiveScore >= 2) {
+    label = positiveScore > 4 ? 'Hyped' : 'Positive';
+  } else if (negativeScore > positiveScore && negativeScore >= 2) {
+    label = 'Frustrated';
+  } else if (confusedScore >= 3 && positiveScore <= 1) {
+    label = 'Confused';
+  }
 
   return {
     bullets: [
       `Chat velocity is active with ${messages.length} messages in this cycle.`,
-      `Audience vibe is currently ${label} with steady engagement.`,
-      `Key conversation focus: ${clusteredQuestions.length > 0 ? clusteredQuestions[0].question.slice(0, 50) + '...' : 'Gameplay reactions and emotes.'}`
+      `Audience sentiment is currently ${label} with ${positiveScore} hype signals and ${confusedScore} queries.`,
+      `Key conversation focus: ${clusteredQuestions.length > 0 ? clusteredQuestions[0].question.slice(0, 50) + '...' : 'Gameplay reactions and live emotes.'}`
     ],
     questions: clusteredQuestions.slice(0, 6),
     sentiment: {
       score: Number(netScore.toFixed(2)),
       label
     },
-    alerts: messages.some(m => /\b(mute|muted|no sound)\b/i.test(m.message)) ? ['Chat reports possible audio mute!'] : []
+    alerts: messages.some(m => /\b(mute|muted|no sound|black screen)\b/i.test(m.message)) ? ['Chat reports possible audio or video issue!'] : []
   };
 }

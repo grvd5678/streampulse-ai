@@ -34,7 +34,7 @@ Fast-moving chat forces live streamers to choose between playing the game and ac
 [ Twitch Live Chat ] 
        │  (IRC stream via tmi.js)
        ▼
-[ Node.js + Express Backend ] ──(Every 25s / on-demand)──► [ OpenAI / Gemini 1.5 Flash ]
+[ Node.js + Express Backend ] ──(Every 15s / on-demand)──► [ OpenAI / Gemini 1.5 Flash ]
        │                                                              │
        │                                                              ▼
        ├─────────────────► [ MongoDB Database ]              (Summary, Questions,
@@ -93,6 +93,6 @@ npm run dev
 ---
 
 ## 🏆 Hackathon Tracks & Alignment
-* **Give chat ways to play along**: Audiences see their questions highlighted live on stream via the OBS overlay.
-* **Help streamers create & manage content**: Streamers never miss important questions during intense gameplay moments.
+* **Help streamers create & manage content**: Streamers stay in their flow state without missing critical questions, technical audio alerts, or audience sentiment during intense broadcasts.
+* **Stream broadcast production & overlays**: Bridges the backend AI intelligence layer directly into the video feed via an interactive, one-click OBS Studio lower-third spotlight.
 

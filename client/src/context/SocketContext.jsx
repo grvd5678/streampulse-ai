@@ -143,12 +143,17 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
     setIsAnalyzing(true);
     try {
       const res = await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
-      if (!res.ok) console.warn('Analyze now returned non-200');
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.result) {
+          setSummaries(prev => [data.result, ...prev.slice(0, 19)]);
+          if (data.result.sentiment) setSentiment(data.result.sentiment);
+        }
+      }
     } catch (e) {
       console.error('Failed to trigger manual analysis:', e);
     } finally {
-      // Guaranteed to unstick the button
-      setTimeout(() => setIsAnalyzing(false), 1200);
+      setIsAnalyzing(false);
     }
   };
 

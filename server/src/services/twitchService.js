@@ -117,11 +117,10 @@ export async function disconnectTwitch() {
 }
 
 /**
- * Runs one batch intelligence pass (Guaranteed to return even if chat is quiet)
+ * Runs one batch intelligence pass (Guaranteed to return an analysis payload)
  */
 export async function runAnalysisPass() {
-  if (!currentChannel) return null;
-
+  const channel = currentChannel || 'demo_stream';
   const messagesToProcess = [...messageBuffer];
   messageBuffer = []; // reset buffer for next cycle
 
@@ -137,13 +136,13 @@ export async function runAnalysisPass() {
   });
 
   try {
-    console.log(`🧠 Running AI analysis on ${messagesToProcess.length} messages for #${currentChannel}...`);
-    const analysis = await analyzeChatBatch(messagesToProcess, currentChannel);
+    console.log(`🧠 Running AI analysis on ${messagesToProcess.length} messages for #${channel}...`);
+    const analysis = await analyzeChatBatch(messagesToProcess, channel);
 
     const payload = {
       id: `${Date.now()}-${Math.random()}`,
       timestamp: new Date(),
-      channel: currentChannel,
+      channel: channel,
       messageCount: messagesToProcess.length,
       ...analysis
     };
@@ -171,9 +170,9 @@ export async function runAnalysisPass() {
     const fallbackPayload = {
       id: `${Date.now()}-${Math.random()}`,
       timestamp: new Date(),
-      channel: currentChannel,
+      channel: channel,
       messageCount: messagesToProcess.length,
-      bullets: ['Chat is moving steadily.', 'Audience engagement is active.'],
+      bullets: ['Chat is moving steadily.', 'Audience engagement is steady.'],
       questions: [],
       sentiment: { score: 0.0, label: 'Neutral' },
       alerts: []
