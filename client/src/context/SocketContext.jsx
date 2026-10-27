@@ -60,11 +60,16 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
       if (status.velocity) setVelocity(status.velocity);
     });
 
-    // Listen to AI summaries
+    // Listen to AI summaries (with ID deduplication)
     s.on('ai_summary_update', (data) => {
       console.log('AI Summary Received:', data);
       setIsAnalyzing(false);
-      setSummaries(prev => [data, ...prev.slice(0, 19)]);
+      setSummaries(prev => {
+        if (!data || !data.id || prev.some(item => item.id === data.id)) {
+          return prev;
+        }
+        return [data, ...prev.slice(0, 19)];
+      });
 
       if (data.questions && data.questions.length > 0) {
         setQuestions(prev => {
@@ -142,17 +147,10 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
   const triggerAnalyzeNow = async () => {
     setIsAnalyzing(true);
     try {
-      const res = await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.result) {
-          setSummaries(prev => [data.result, ...prev.slice(0, 19)]);
-          if (data.result.sentiment) setSentiment(data.result.sentiment);
-        }
-      }
+      await fetch(`${SOCKET_URL}/api/analyze-now`, { method: 'POST' });
+      // The new summary will be delivered cleanly via the 'ai_summary_update' socket event
     } catch (e) {
       console.error('Failed to trigger manual analysis:', e);
-    } finally {
       setIsAnalyzing(false);
     }
   };
