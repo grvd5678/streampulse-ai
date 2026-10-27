@@ -4,7 +4,7 @@ import { useSocket } from '../context/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function QuestionQueue() {
-  const { questions, pinQuestion, unpinQuestion, markQuestionAnswered, pinnedQuestion } = useSocket();
+  const { questions = [], pinQuestion, unpinQuestion, markQuestionAnswered, pinnedQuestion } = useSocket();
 
   const activeQuestions = questions.filter(q => !q.isAnswered);
   const normalizeQuestion = (value) => value.toLowerCase()

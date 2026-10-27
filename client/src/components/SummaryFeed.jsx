@@ -4,7 +4,7 @@ import { useSocket } from '../context/SocketContext';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function SummaryFeed() {
-  const { summaries, alerts, highlights, saveHighlight } = useSocket();
+  const { summaries = [], alerts = [], highlights = [] } = useSocket();
 
   return (
     <div className="flex flex-col h-full bg-twitch-card border border-twitch-border rounded-xl p-4 shadow-sm">
@@ -77,10 +77,19 @@ export default function SummaryFeed() {
             })}
           </AnimatePresence>
         )}
-        {highlights.length > 0 && <div className="mt-4 border-t border-twitch-border pt-3">
-          <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-twitch-accent"><BookmarkCheck className="h-3.5 w-3.5" /> Saved for after stream ({highlights.length})</div>
-          {highlights.slice(0, 3).map(item => <div key={item.id} className="mb-2 rounded-lg border border-twitch-border bg-twitch-bg p-2.5 text-xs text-twitch-text"><div className="mb-1 text-[10px] text-twitch-muted">{new Date(item.timestamp).toLocaleTimeString()} · {item.title}</div>{item.details}</div>)}
-        </div>}
+        {Array.isArray(highlights) && highlights.length > 0 && (
+          <div className="mt-4 border-t border-twitch-border pt-3">
+            <div className="mb-2 flex items-center gap-2 text-xs font-semibold text-twitch-accent">
+              <BookmarkCheck className="h-3.5 w-3.5" /> Saved for after stream ({highlights.length})
+            </div>
+            {highlights.slice(0, 3).map(item => (
+              <div key={item.id} className="mb-2 rounded-lg border border-twitch-border bg-twitch-bg p-2.5 text-xs text-twitch-text">
+                <div className="mb-1 text-[10px] text-twitch-muted">{new Date(item.timestamp).toLocaleTimeString()} · {item.title}</div>
+                {item.details}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

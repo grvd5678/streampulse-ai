@@ -157,6 +157,8 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
     }
   };
 
+  const [highlights, setHighlights] = useState([]);
+
   return (
     <SocketContext.Provider value={{
       socket,
@@ -169,6 +171,7 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
       rawMessages,
       pinnedQuestion,
       alerts,
+      highlights,
       isAnalyzing,
       pinQuestion,
       unpinQuestion,
