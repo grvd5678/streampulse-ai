@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 
 const SocketContext = createContext();
@@ -20,7 +20,11 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
   const [rawMessages, setRawMessages] = useState([]);
   const [pinnedQuestion, setPinnedQuestion] = useState(null);
   const [alerts, setAlerts] = useState([]);
+  const [highlights, setHighlights] = useState([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // Dedicated ref to ensure atomic, side-effect-free deduplication
+  const processedAnalysisIdsRef = useRef(new Set());
 
   useEffect(() => {
     const s = io(SOCKET_URL, {
@@ -60,44 +64,42 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
       if (status.velocity) setVelocity(status.velocity);
     });
 
-    // Listen to AI summaries (with full payload deduplication)
+    // Clean, pure state updates with atomic ref deduplication (no side effects in state updaters)
     s.on('ai_summary_update', (data) => {
-      console.log('AI Summary Received:', data);
       setIsAnalyzing(false);
 
       if (!data || !data.id) return;
 
-      // Ensure the ENTIRE payload is only processed once
-      setSummaries(prev => {
-        if (prev.some(item => item.id === data.id)) {
-          return prev; // Already processed this analysis ID
-        }
+      // Ignore already processed batches
+      if (processedAnalysisIdsRef.current.has(data.id)) return;
+      processedAnalysisIdsRef.current.add(data.id);
 
-        // Only append questions if this analysis batch is fresh
-        if (data.questions && data.questions.length > 0) {
-          setQuestions(prevQ => {
-            const newQuestions = data.questions.map(q => ({
-              ...q,
-              id: `${data.id}-${q.question.slice(0, 10)}-${Math.random()}`,
-              timestamp: new Date(),
-              isAnswered: false,
-              isPinned: false
-            }));
-            return [...newQuestions, ...prevQ].slice(0, 30);
-          });
-        }
+      // Keep ref size bounded
+      if (processedAnalysisIdsRef.current.size > 100) {
+        processedAnalysisIdsRef.current.clear();
+        processedAnalysisIdsRef.current.add(data.id);
+      }
 
-        // Only append alerts if this analysis batch is fresh
-        if (data.alerts && data.alerts.length > 0) {
-          setAlerts(prevA => [...data.alerts, ...prevA].slice(0, 10));
-        }
+      setSummaries(prev => [data, ...prev.slice(0, 19)]);
 
-        if (data.sentiment) {
-          setSentiment(data.sentiment);
-        }
+      if (data.questions && data.questions.length > 0) {
+        const newQuestions = data.questions.map(q => ({
+          ...q,
+          id: `${data.id}-${q.question.slice(0, 10)}-${Math.random()}`,
+          timestamp: new Date(),
+          isAnswered: false,
+          isPinned: false
+        }));
+        setQuestions(prev => [...newQuestions, ...prev].slice(0, 30));
+      }
 
-        return [data, ...prev.slice(0, 19)];
-      });
+      if (data.alerts && data.alerts.length > 0) {
+        setAlerts(prev => [...data.alerts, ...prev].slice(0, 10));
+      }
+
+      if (data.sentiment) {
+        setSentiment(data.sentiment);
+      }
     });
 
     // Listen to live raw chat
@@ -168,8 +170,6 @@ export const SocketProvider = ({ children, role = 'dashboard' }) => {
       setIsAnalyzing(false); // Deterministic reset: guaranteed never stuck
     }
   };
-
-  const [highlights, setHighlights] = useState([]);
 
   return (
     <SocketContext.Provider value={{
