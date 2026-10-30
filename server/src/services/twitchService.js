@@ -120,7 +120,7 @@ export async function disconnectTwitch() {
  * Runs one batch intelligence pass (Guaranteed to return an analysis payload)
  */
 export async function runAnalysisPass() {
-  const channel = currentChannel || 'demo_stream';
+  const channel = currentChannel || 'grvd_live';
   const messagesToProcess = [...messageBuffer];
   messageBuffer = []; // reset buffer for next cycle
 
@@ -190,13 +190,13 @@ function startAnalysisCycle() {
 /**
  * Realistic Twitch Chat Simulator (Async and race-free)
  */
-export async function startSimulator(channelName = 'demo_stream') {
+export async function startSimulator(channelName = 'grvd_live') {
   // AWAIT the disconnect to prevent race conditions
   await disconnectTwitch();
 
   currentChannel = channelName;
   isSimulatorActive = true;
-  console.log('🎮 Simulator started for channel:', channelName);
+  console.log('🎮 Simulator started for streamer channel:', channelName);
 
   const sampleUsers = ['KittenSlayer99', 'PixelKnight', 'CodeNinja', 'CyberValkyrie', 'GamerGuy_24', 'CoffeeCoder', 'ShadowStrike', 'Nova_x'];
   const sampleMessages = [

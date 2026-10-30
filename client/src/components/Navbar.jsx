@@ -3,7 +3,7 @@ import { Radio, Play, Square, ExternalLink, Sparkles, Zap, Activity } from 'luci
 import { useSocket } from '../context/SocketContext';
 
 export default function Navbar({ currentChannel, onConnect, onDisconnect, onStartSimulator, onStopSimulator }) {
-  const [channelInput, setChannelInput] = useState(currentChannel || 'shroud');
+  const [channelInput, setChannelInput] = useState(currentChannel || 'grvd_live');
   const { isConnected, twitchStatus, velocity, triggerAnalyzeNow, isAnalyzing } = useSocket();
 
   const isLive = twitchStatus.isTwitchConnected;

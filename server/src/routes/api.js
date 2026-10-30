@@ -39,7 +39,7 @@ router.post('/channel/disconnect', async (req, res) => {
 
 router.post('/simulator/start', async (req, res) => {
   const { channel } = req.body;
-  const result = await startSimulator(channel || 'demo_stream');
+  const result = await startSimulator(channel || 'grvd_live');
   res.json(result);
 });
 

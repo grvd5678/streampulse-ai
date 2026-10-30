@@ -8,7 +8,7 @@ import { Key, Sparkles, X, Check, AlertCircle } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
 export default function Dashboard() {
-  const [currentChannel, setCurrentChannel] = useState('shroud');
+  const [currentChannel, setCurrentChannel] = useState('grvd_live');
   const [showKeyModal, setShowKeyModal] = useState(false);
   const [openaiKeyInput, setOpenaiKeyInput] = useState('');
   const [geminiKeyInput, setGeminiKeyInput] = useState('');
