@@ -3,7 +3,7 @@ import { io } from 'socket.io-client';
 
 const SocketContext = createContext();
 
-const SOCKET_URL = 'http://localhost:5000';
+const SOCKET_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
 
 export const SocketProvider = ({ children, role = 'dashboard' }) => {
   const [socket, setSocket] = useState(null);

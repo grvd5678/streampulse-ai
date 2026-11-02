@@ -7,6 +7,8 @@ import LiveChatFeed from '../components/LiveChatFeed';
 import { Key, Sparkles, X, Check, AlertCircle } from 'lucide-react';
 import { useSocket } from '../context/SocketContext';
 
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
+
 export default function Dashboard() {
   const [currentChannel, setCurrentChannel] = useState('grvd_live');
   const [showKeyModal, setShowKeyModal] = useState(false);
@@ -25,7 +27,7 @@ export default function Dashboard() {
 
   const handleConnect = async (channel) => {
     try {
-      await fetch('http://localhost:5000/api/channel/connect', {
+      await fetch(`${SERVER_URL}/api/channel/connect`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel })
@@ -38,7 +40,7 @@ export default function Dashboard() {
 
   const handleDisconnect = async () => {
     try {
-      await fetch('http://localhost:5000/api/channel/disconnect', { method: 'POST' });
+      await fetch(`${SERVER_URL}/api/channel/disconnect`, { method: 'POST' });
     } catch (err) {
       console.error('Failed to disconnect:', err);
     }
@@ -46,7 +48,7 @@ export default function Dashboard() {
 
   const handleStartSimulator = async (channel) => {
     try {
-      await fetch('http://localhost:5000/api/simulator/start', {
+      await fetch(`${SERVER_URL}/api/simulator/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel })
@@ -59,7 +61,7 @@ export default function Dashboard() {
 
   const handleStopSimulator = async () => {
     try {
-      await fetch('http://localhost:5000/api/simulator/stop', { method: 'POST' });
+      await fetch(`${SERVER_URL}/api/simulator/stop`, { method: 'POST' });
     } catch (err) {
       console.error('Failed to stop simulator:', err);
     }
@@ -71,7 +73,7 @@ export default function Dashboard() {
     setKeySavedMessage('');
 
     try {
-      const res = await fetch('http://localhost:5000/api/config/keys', {
+      const res = await fetch(`${SERVER_URL}/api/config/keys`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
