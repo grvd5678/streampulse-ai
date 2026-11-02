@@ -38,9 +38,14 @@ router.post('/channel/disconnect', async (req, res) => {
 });
 
 router.post('/simulator/start', async (req, res) => {
-  const { channel } = req.body;
-  const result = await startSimulator(channel || 'grvd_live');
-  res.json(result);
+  try {
+    const channel = req.body?.channel || 'grvd_live';
+    const result = await startSimulator(channel);
+    res.json(result);
+  } catch (err) {
+    console.error('Simulator start error:', err);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 router.post('/simulator/stop', async (req, res) => {

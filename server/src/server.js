@@ -21,6 +21,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE']
 }));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Socket.IO
 const io = new Server(server, {
