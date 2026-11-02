@@ -3,7 +3,8 @@ import { io } from 'socket.io-client';
 
 const SocketContext = createContext();
 
-const SOCKET_URL = import.meta.env.VITE_SERVER_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : 'https://streampulse-ai-j8br.onrender.com');
+const rawSocketUrl = import.meta.env.VITE_SERVER_URL || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5000' : 'https://streampulse-ai-j8br.onrender.com');
+const SOCKET_URL = rawSocketUrl.replace(/\/+$/, '');
 
 export const SocketProvider = ({ children, role = 'dashboard' }) => {
   const [socket, setSocket] = useState(null);
